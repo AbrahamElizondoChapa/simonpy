@@ -7,7 +7,8 @@ from tkinter import ttk
 global engine
 engine = None
 
-global usrSeq
+global usrSeq, usrColor
+usrColor = None
 colors = ['red', 'blue', 'yellow', 'green']
 difficulty = ['easy', 'medium', 'hard', 'very hard', 'epic']
 difficultyData = {
@@ -40,10 +41,10 @@ def setDifficulty(k):
     print(f"delay: {delay}, rate: {velocityInit}")
 
 def init_speech_engine():
-    global engine
+    global engine, velocityInit
     engine = pyttsx3.init()
     print(f"get property raTe: {engine.getProperty('rate')}")
-    engine.setProperty('rate', 300)  # Inicializa con la velocidad
+    engine.setProperty('rate', velocityInit)  # Inicializa con la velocidad
     print(f"get property rate: {engine.getProperty('rate')}")
     engine.setProperty('language', 'en')
 
@@ -82,7 +83,7 @@ def changeColor(newColor, index):
     soundit(newColor)
     root.after(delay, lambda: showSequence(index + 1))  # Esperar 1 segundo para mostrar el siguiente color
 
-def updateSquareColor():
+def updateSequence():
     global x, engine, menuDifficulty
 
     for i in range(len(difficultyData)):
@@ -106,32 +107,51 @@ def exit():
     soundit("Good Bye!")
     root.destroy()
 
-def click_cuadrante(event, quadrant):
-    global userIt, sequence
-    usrSeq = []
-    print("intro click quadrant:::::::::::::::::::::::::::::::::")
-    print("Secuencia mostrada: ", sequence)
-    print(f"User sequence : {userIt}")
-    secGen(usrSeq,colors[quadrant])
-    print(f"secuencia usr {usrSeq}")
-    print(f"secuencia simon {sequence}")
+def simon():
+    global life, userIt
+    if life > 0:
+        updateSequence()
+        userIt = 0
+        usrSeq.clear()  # Limpiar la secuencia del usuario
+        root.after(1000, lambda: startWaitingForInput())
 
-    for i in range(userIt):
-        print(f"printing i-> {i}")
+def startWaitingForInput():
+    global usrColor
+    usrColor = None  # Reiniciar el color del usuario para esperar clics
 
-    i = 0
-    while i <= userIt:
-        print(f"i: {i}")
-        print(f"User sequence : {userIt}")
-        print(f"color secuencia usr {usrSeq[i]}")
-        print(f"color secuencia simon {sequence[i]}")
-        if usrSeq[i] == sequence[i]:
-            print("correcto")
+def clickQuadrante(event, quadrant):
+    global userIt, sequence, usrSeq, usrColor, life
+    
+    if usrColor is None:  # Solo registrar clics si estamos esperando la entrada del usuario
+        usrColor = colors[quadrant]
+        secGen(usrSeq, usrColor)
+        print(f"secuencia usr {usrSeq}")
+        print(f"secuencia simon {sequence}")
+
+        # Verificamos si el índice es válido
+        if userIt < len(sequence):
+            if usrSeq[userIt] == sequence[userIt]:
+                print("correcto")
+                userIt += 1
+                if userIt == len(sequence):  # Si el usuario ha completado la secuencia
+                    print("Usuario ha completado la secuencia")
+                    usrColor = None  # Espera la siguiente secuencia
+                    root.after(1000, simon)  # Comienza una nueva secuencia después de un breve retardo
+            else:
+                print("incorrecto")
+                life -= 1
+                print(f"Vida restante: {life}")
+                userIt = 0
+                usrSeq.clear()  # Limpiar la secuencia del usuario
+                if life <= 0:
+                    print("Juego terminado")
+                    exit()  # Termina el juego si se han acabado las vidas
         else:
-            print("incorrecto")
-        i += 1
-    userIt += 1
-    updateSquareColor()
+            print("Se intentó acceder a un índice inválido")
+
+        # Restablecer usrColor para permitir más clics
+        usrColor = None
+
 
 def main():
     global canvas, root, quadrants, menuDifficulty
@@ -161,7 +181,7 @@ def main():
     label3.grid(column=2, row=0, sticky='w')
 
     #start
-    button6 = tk.Button(frm, text="start", command=lambda: updateSquareColor())
+    button6 = tk.Button(frm, text="start", command=lambda: simon())
     button6.grid(column=8, row=0, padx=6, pady=6)
 
     # Canvas for drawing
@@ -176,7 +196,7 @@ def main():
     quadrants.append(canvas.create_arc(0, 0, 200, 200, start=270, extent=90, fill=circleFill, outline=outline)) # Verde
     
     for i, quadrant in enumerate(quadrants):
-        canvas.tag_bind(quadrant,"<Button-1>", lambda event, quadrant=i: click_cuadrante(event, quadrant))
+        canvas.tag_bind(quadrant,"<Button-1>", lambda event, quadrant=i: clickQuadrante(event, quadrant))
     
     root.config(menu=menuBar)
     root.mainloop()
