@@ -3,16 +3,19 @@ import pyttsx3
 from tkinter import *
 import tkinter as tk
 from tkinter import ttk
+import threading
 
-global engine
 engine = None
 
-global usrSeq, usrColor
+# Variable global para controlar el hilo
+is_running = True
+speech_thread = None
+
 usrColor = None
 colors = ['red', 'blue', 'yellow', 'green']
 difficulty = ['easy', 'medium', 'hard', 'very hard', 'epic']
 difficultyData = {
-    "easy": (1000,100),
+    "easy": (1000, 100),
     "medium": (500, 150),
     "hard": (250, 250),
     "very hard": (150, 300),
@@ -30,131 +33,191 @@ incrementalMode = True
 circleFill = 'black'
 outline = 'white'
 
+def addScore(qty):
+    global score
+    score += qty
+
+def addLife(qty):
+    global life
+    life += qty
+
 def setDifficulty(k):
     global velocityInit, delay
-    level = k
     value = difficultyData[k]
     delay = value[0]
     speed = value[1]
     velocityInit = speed
-    print(f"nivel de dificultad: {level} -> {value}")
-    print(f"delay: {delay}, rate: {velocityInit}")
 
 def init_speech_engine():
     global engine, velocityInit
     engine = pyttsx3.init()
-    print(f"get property raTe: {engine.getProperty('rate')}")
-    engine.setProperty('rate', velocityInit)  # Inicializa con la velocidad
-    print(f"get property rate: {engine.getProperty('rate')}")
+    engine.setProperty('rate', velocityInit)
     engine.setProperty('language', 'en')
 
 def secGen(sec, color):
     sec.append(color)
 
 def soundit(txt):
-    global engine
+    global engine, is_running, speech_thread
     if engine is None:
         init_speech_engine()
-    print(f"get property ratee: {engine.getProperty('rate')}")
-    engine.say(txt)
-    engine.runAndWait()
+
+    def speak():
+        global is_running
+        engine.say(txt)
+        engine.runAndWait()
+
+    if not is_running:
+        return
+
+    if speech_thread is not None and speech_thread.is_alive():
+        return
+
+    speech_thread = threading.Thread(target=speak)
+    speech_thread.start()
 
 def showSequence(index=0):
     global delay
     if index < len(sequence):
-        # Ocultar todos los cuadrantes
         for i in range(4):
             canvas.itemconfig(quadrants[i], fill=circleFill)
-        # Esperar un breve período antes de mostrar el nuevo color
-        root.after(int(delay*0.5), lambda: changeColor(sequence[index], index))
+        root.after(int(delay * 0.75), lambda: changeColor(sequence[index], index))
     else:
-        root.after(int(delay*0.3))
-        # Ocultar todos los cuadrantes
-        for i in range(4):
-            canvas.itemconfig(quadrants[i], fill=circleFill)
-        print("Secuencia mostrada: ", sequence)
+        root.after(int(delay * 0.75), lambda: hideAllQuadrants())
+
+def hideAllQuadrants():
+    for i in range(4):
+        canvas.itemconfig(quadrants[i], fill=circleFill)
+    root.after(int(delay * 0.5))
 
 def changeColor(newColor, index):
     global delay
-    # Iluminar el cuadrante correspondiente
     color_index = colors.index(newColor)
     canvas.itemconfig(quadrants[color_index], fill=newColor)
-
+    root.after(int(delay * 0.25))
     soundit(newColor)
-    root.after(delay, lambda: showSequence(index + 1))  # Esperar 1 segundo para mostrar el siguiente color
+    root.after(int(delay * 0.25))
+    root.after(delay, lambda: showSequence(index + 1))
 
 def updateSequence():
-    global x, engine, menuDifficulty
-
-    for i in range(len(difficultyData)):
-        menuDifficulty.entryconfig(i,state='disabled')
+    global x, velocityInit, engine
 
     if engine is None:
         init_speech_engine()
     if incrementalMode:
-        x += 10  # Incrementa la velocidad
+        x += 10
     newVel = velocityInit + x
-    print(f"New velocity = {newVel}")
     engine = pyttsx3.init()
-    engine.setProperty('rate', newVel)  # Actualiza la velocidad
-    print(f"get property rate: {engine.getProperty('rate')}")
+    engine.setProperty('rate', newVel)
     newColor = random.choice(colors)
     secGen(sequence, newColor)
-    print("Update Simon Sequence")
     showSequence()
 
+def stop_speech_engine():
+    global engine, is_running, speech_thread
+    is_running = False
+    if engine is not None:
+        engine.stop()
+        engine = None
+
+    if speech_thread is not None:
+        speech_thread.join()
+
 def exit():
-    soundit("Good Bye!")
-    root.destroy()
+    global is_running
+    is_running = False  # Detener el hilo
+    stop_speech_engine()  # Detener el motor de voz
+    
+    # Detener cualquier acción en curso
+    if speech_thread is not None:
+        speech_thread.join()  # Esperar a que el hilo de voz termine
+
+    root.destroy()  # Cerrar la ventana
+
+
+def dissableDifficulty():
+    global menuDifficulty
+    for i in range(len(difficultyData)):
+        menuDifficulty.entryconfig(i, state='disabled')
+
+def enableDifficulty():
+    global menuDifficulty
+    for i in range(len(difficultyData)):
+        menuDifficulty.entryconfig(i, state='normal')
+
+def dissableStartButton():
+    global buttonStart
+    buttonStart.config(state='disabled')
+
+def enableStartButton():
+    global buttonStart
+    buttonStart.config(state='normal')
+
+def updateLabels():
+    global labelLife, labelScore
+    labelLife.config(text=f"Life: {life}")
+    labelScore.config(text=f"Score: {score}")
 
 def simon():
     global life, userIt
+
+    dissableDifficulty()
+    dissableStartButton()
+    
     if life > 0:
         updateSequence()
         userIt = 0
-        usrSeq.clear()  # Limpiar la secuencia del usuario
-        root.after(1000, lambda: startWaitingForInput())
+        usrSeq.clear()
+        root.after(1000, startWaitingForInput)
 
 def startWaitingForInput():
     global usrColor
-    usrColor = None  # Reiniciar el color del usuario para esperar clics
+    usrColor = None
 
-def clickQuadrante(event, quadrant):
-    global userIt, sequence, usrSeq, usrColor, life
+def clickQuadrant(event, quadrant):
+    global userIt, sequence, usrSeq, usrColor, life, score, labelLife, labelScore, buttonStart
     
-    if usrColor is None:  # Solo registrar clics si estamos esperando la entrada del usuario
+    if usrColor is None:
         usrColor = colors[quadrant]
         secGen(usrSeq, usrColor)
-        print(f"secuencia usr {usrSeq}")
-        print(f"secuencia simon {sequence}")
 
-        # Verificamos si el índice es válido
+        canvas.itemconfig(quadrants[quadrant], fill=usrColor)
+        root.after(delay, lambda: canvas.itemconfig(quadrants[quadrant], fill=circleFill))
+
         if userIt < len(sequence):
             if usrSeq[userIt] == sequence[userIt]:
-                print("correcto")
                 userIt += 1
-                if userIt == len(sequence):  # Si el usuario ha completado la secuencia
-                    print("Usuario ha completado la secuencia")
-                    usrColor = None  # Espera la siguiente secuencia
-                    root.after(1000, simon)  # Comienza una nueva secuencia después de un breve retardo
+                addScore(10)
+                updateLabels()
+                if userIt == len(sequence):
+                    usrColor = None
+                    root.after(1000, simon)
             else:
-                print("incorrecto")
-                life -= 1
-                print(f"Vida restante: {life}")
+                addLife(-1)
+                addScore(-3)
                 userIt = 0
-                usrSeq.clear()  # Limpiar la secuencia del usuario
+                usrSeq.clear()
+                updateLabels()
                 if life <= 0:
+                    updateLabels()
                     print("Juego terminado")
-                    exit()  # Termina el juego si se han acabado las vidas
+                    print("Inicializando valores para jugar de nuevo.")
+                    userIt = 0
+                    usrSeq.clear()
+                    usrColor = None
+                    sequence.clear()
+                    life = 3
+                    score = 0
+                    updateLabels()
+                    enableStartButton()
+                    enableDifficulty()
         else:
             print("Se intentó acceder a un índice inválido")
 
-        # Restablecer usrColor para permitir más clics
         usrColor = None
 
-
 def main():
-    global canvas, root, quadrants, menuDifficulty
+    global canvas, root, quadrants, menuDifficulty, labelLife, labelScore, buttonStart
     root = Tk()
     frm = ttk.Frame(root, padding=10)
     frm.grid()
@@ -163,10 +226,9 @@ def main():
     menuDifficulty = tk.Menu(menuBar, tearoff=0)
     
     for key in difficultyData:
-        print(f"cargando opcion de menu dificultad {key}")
         menuDifficulty.add_command(label=key, command=lambda key=key: setDifficulty(key))
 
-    menuBar.add_cascade(label='Difficulty',menu=menuDifficulty)
+    menuBar.add_cascade(label='Difficulty Level', menu=menuDifficulty)
     menuBar.add_command(label='Exit Game', command=exit)
 
     # Label Simon
@@ -174,21 +236,21 @@ def main():
     label1.grid(column=0, row=0, sticky='w')
 
     # Score and Life Labels
-    label2 = tk.Label(frm, text=f"Life: {life}", fg='red')
-    label2.grid(column=1, row=0, sticky='w')
+    labelLife = tk.Label(frm, text=f"Life: {life}", fg='red')
+    labelLife.grid(column=1, row=0, sticky='w')
 
-    label3 = tk.Label(frm, text=f"Score: {score}", fg='green')
-    label3.grid(column=2, row=0, sticky='w')
+    labelScore = tk.Label(frm, text=f"Score: {score}", fg='green')
+    labelScore.grid(column=2, row=0, sticky='w')
 
-    #start
-    button6 = tk.Button(frm, text="start", command=lambda: simon())
-    button6.grid(column=8, row=0, padx=6, pady=6)
+    # Start button
+    buttonStart = tk.Button(frm, text="Start", command=lambda: simon())
+    buttonStart.grid(column=8, row=0, padx=6, pady=6)
 
     # Canvas for drawing
     canvas = Canvas(frm, width=200, height=200)
     canvas.grid(column=1, row=1, columnspan=2, rowspan=2, pady=10)
 
-    # Dibujar cuadrantes
+    # Draw quadrants
     quadrants = []
     quadrants.append(canvas.create_arc(0, 0, 200, 200, start=0, extent=90, fill=circleFill, outline=outline))   # Rojo
     quadrants.append(canvas.create_arc(0, 0, 200, 200, start=90, extent=90, fill=circleFill, outline=outline))  # Azul
@@ -196,7 +258,7 @@ def main():
     quadrants.append(canvas.create_arc(0, 0, 200, 200, start=270, extent=90, fill=circleFill, outline=outline)) # Verde
     
     for i, quadrant in enumerate(quadrants):
-        canvas.tag_bind(quadrant,"<Button-1>", lambda event, quadrant=i: clickQuadrante(event, quadrant))
+        canvas.tag_bind(quadrant, "<Button-1>", lambda event, quadrant=i: clickQuadrant(event, quadrant))
     
     root.config(menu=menuBar)
     root.mainloop()
