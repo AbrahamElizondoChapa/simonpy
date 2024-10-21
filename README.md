@@ -24,5 +24,5 @@
      2. Kali Linux
      
 # Contact:
-    gmail:- elizondo.abraham@gmail.com
+    gmail: elizondo.abraham@gmail.com
      
