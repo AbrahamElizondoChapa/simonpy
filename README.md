@@ -19,7 +19,7 @@
      *. For Windows:
          1. python simonpy.py
 
- # This Tool Tested On:
+ # This Python Simple Game was Tested On:
      1. Windows 11
      2. Kali Linux
      
