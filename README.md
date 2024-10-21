@@ -1,6 +1,6 @@
 ## ***About Simonpy***:
     SIMONPY IS A PYTHON BASED OF CLASSIC GAME CALLED SIMON.
-    You can select the difficult level before start the game. 
+    You can select the difficulty level before start the game. 
     The game will generate a random sequence of colors, and after that,
     the player's goal is to repeat the sequence. 
     If the player sequence was wrong, the player lose one life and three points.
